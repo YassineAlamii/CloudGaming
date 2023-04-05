@@ -1,15 +1,18 @@
 using System;
+using PlayFab;
+using PlayFab.ClientModels;
 using UnityEngine;
 using UnityEngine.UI;
 
 [System.Serializable]
 public class ShopItem
 {
-    public string itemID = string.Empty;                // ID in the catalog
-    public string itemDisplayName = string.Empty;       // Displayed name
-    public string itemImageURL = string.Empty;          // Image to display (found in Resources)
-    public bool isUnique = false;                       // Unique item or consumable ?
-    public uint itemPrice = 0;                          // Prix 
+    public string itemID = string.Empty;               
+    public string itemDisplayName = string.Empty;       
+    public string itemImageURL = string.Empty;          
+    public bool isUnique = false;                       
+    public uint itemPrice = 0;      
+                        // Prix 
 }
 
 public class ShopEntry : MonoBehaviour
@@ -23,27 +26,27 @@ public class ShopEntry : MonoBehaviour
     public Text itemValueText = null;
     public Image itemValueSprite = null;
 
-    // OnEnable / OnDisable
+    
     void OnEnable()
     {
-        // Inventory is setup?
+        
         if (PlayfabInventory.Instance != null)
         {
-            // Register to events
+            
             PlayfabInventory.Instance.OnInventoryUpdateSuccess.AddListener(this.OnInventoryUpdateSuccess);
             PlayfabInventory.Instance.OnInventoryUpdateError.AddListener(this.OnInventoryUpdateError);
         }
 
-        //// Update view to init
-        //this.UpdateView();
+        
+        this.UpdateView();
     }
 
     void OnDisable()
     {
-        // Inventory is setup?
+        
         if (PlayfabInventory.Instance != null)
         {
-            // Unregister to events
+            
             PlayfabInventory.Instance.OnInventoryUpdateSuccess.RemoveListener(this.OnInventoryUpdateSuccess);
             PlayfabInventory.Instance.OnInventoryUpdateError.RemoveListener(this.OnInventoryUpdateError);
         }
@@ -71,7 +74,7 @@ public class ShopEntry : MonoBehaviour
             // If unique & already in inventoryk, specific view
             if (isUnique == true && PlayfabInventory.Instance.Possess(this.shopItem.itemID) == true)
             {
-                // Mark as possessed
+                
                 isPossessed = true;
             }
 
@@ -80,7 +83,7 @@ public class ShopEntry : MonoBehaviour
             string itemName = this.shopItem.itemDisplayName;
             uint itemPrice = this.shopItem.itemPrice;
 
-            // Update sprite
+            
             if (this.itemSprite != null)
             {
                 Sprite sprite = (string.IsNullOrWhiteSpace(itemImageURL) == false ? Resources.Load<Sprite>(itemImageURL) : null);
@@ -90,17 +93,17 @@ public class ShopEntry : MonoBehaviour
                     this.itemSprite.sprite = null;
             }
 
-            // Update name
+            
             if (this.itemNameText != null)
                 this.itemNameText.text = itemName;
 
-            // If we have bough the item
+            
             if (PlayfabInventory.Instance != null && PlayfabInventory.Instance.Inventory != null)
             {
-                // If already possessed,
+                
                 if (isPossessed == true)
                 {
-                    // Hide item price image
+                    
                     if (this.itemValueSprite != null)
                         this.itemValueSprite.gameObject.SetActive(false);
 
@@ -135,47 +138,63 @@ public class ShopEntry : MonoBehaviour
     }
 
     // Buy item
-    public void TryBuyItem()
+public void TryBuyItem()
+{
+    // Determine some data from the catalog item itself
+    bool isUnique = (this.shopItem.isUnique == true);
+    bool isPossessed = false;
+
+    // If already in inventory
+    if (PlayfabInventory.Instance.Possess(this.shopItem.itemID) == true)
     {
-        // Determine some data from the catalog item itself
-        bool isUnique = (this.shopItem.isUnique == true);
-        bool isPossessed = false;
-
-        // If already in inventory
-        if (PlayfabInventory.Instance.Possess(this.shopItem.itemID) == true)
-        {
-            // Mark as possessed
-            isPossessed = true;
-        }
-
-        // If unique & already possessed, prevent buy
-        if (isUnique == true && isPossessed == true)
-        {
-            Debug.LogWarning("ShopEntry.TryBuyItem() - " + this.gameObject.name + ": Prevent buy as it's unique & already possessed");
-            return;
-        }
-
-        // TODO: Trigger item purchasing
-        this.OnPurchaseItemSuccess();
+        // Mark as possessed
+        isPossessed = true;
     }
+
+    // If unique & already possessed, prevent buy
+    if (isUnique == true && isPossessed == true)
+    {
+        Debug.LogWarning("ShopEntry.TryBuyItem() - " + this.gameObject.name + ": Prevent buy as it's unique & already possessed");
+        return;
+    }
+
+    // Trigger item purchasing
+    var request = new PurchaseItemRequest
+    {
+        ItemId = this.shopItem.itemID,
+        VirtualCurrency = "CR",
+        Price = (int)this.shopItem.itemPrice,
+    };
+
+    PlayFabClientAPI.PurchaseItem(request, result =>
+    {
+        // Purchase succeeded
+        Debug.Log("ShopEntry.TryBuyItem() - " + this.gameObject.name + ": Purchase succeeded");
+        this.OnPurchaseItemSuccess();
+    }, error =>
+    {
+        // Purchase failed
+        Debug.LogWarning("ShopEntry.TryBuyItem() - " + this.gameObject.name + ": Purchase failed: " + error.ErrorMessage);
+    });
+}
 
     private void OnPurchaseItemSuccess()
     {
-        // Log
+        
         Debug.Log("PlayerStatsView.OnPurchaseItemSuccess()");
 
-        // Update inventory
+        
         if (PlayfabInventory.Instance != null)
             PlayfabInventory.Instance.UpdateInventory();
     }
 
     private void OnPurchaseItemError()
     {
-        // Log
+        
         Debug.LogError("PlayerStatsView.OnUpdateUserAccountInfosError() - Error: TODO");
     }
 
-    // Playfab Inventory events we register to
+   
     private void OnInventoryUpdateSuccess()
     {
         this.UpdateView();
